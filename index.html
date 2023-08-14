@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio and PDF Transcription</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+        }
+        .container {
+            max-height: 100%;
+            overflow: auto; /* Scroll inside container if needed */
+        }
+        #pdf-viewer, #pdf-result {
+            height: 300px; /* You can adjust this */
+        }
+        #audio-result {
+            text-align: justify; /* Align text to both left and right margins */
+            line-height: 1.5; /* Control the space between lines */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mt-4">Transcribe Audio</h1>
+        <div class="form-group">
+            <input type="file" id="audio-file" accept="audio/*" class="form-control">
+        </div>
+        <button onclick="transcribeAudio()" class="btn btn-primary mb-4">Transcribe</button>
+        <audio id="audio-player" controls></audio>
+        <p id="audio-result" style="white-space: pre-line;"></p>
+
+        <h1 class="text-center mt-4">Translate PDF</h1>
+        <div class="form-group">
+            <input type="file" id="pdf-file" accept="application/pdf" class="form-control">
+        </div>
+        <button onclick="pdfToText()" class="btn btn-primary mb-4">Translate</button>
+        <div class="row">
+            <div class="col-md-6">
+                <object id="pdf-viewer" data="" type="application/pdf" style="width: 100%; height: 500px;" aria-labelledby="pdf-label">
+                    <embed src="" type="application/pdf">
+                        <p id="pdf-label">Your browser does not support PDFs. Please <a href="" id="pdf-download-link">download the PDF</a> to view it.</p>
+                    </embed>
+                </object>
+            </div>
+            <div class="col-md-6">
+                <p id="pdf-result" style="white-space: pre-line;"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function transcribeAudio() {
+            var audioFile = $('#audio-file')[0].files[0];
+            var formData = new FormData();
+            formData.append('audio', audioFile);
+
+            $.ajax({
+                url: '/transcribe',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(result) {
+                    $('#audio-result').text(result.transcription || "No transcription available.");
+                    var url = URL.createObjectURL(audioFile);
+                    $('#audio-player').attr('src', url); // Set audio source
+                },
+                error: function(error) {
+                    $('#audio-result').text('Error: ' + error.responseJSON.error);
+                }
+            });
+        }
+
+        function pdfToText() {
+            var pdfFile = $('#pdf-file')[0].files[0];
+            var formData = new FormData();
+            formData.append('file', pdfFile);
+
+            $.ajax({
+                url: '/pdf_to_text',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(text) {
+                    var textWithSpaces = text.replace(/ {2,}/g, function(match) {
+                        return match; // Return the exact match of multiple spaces
+                    });
+                    $('#pdf-result').text(textWithSpaces);
+                    var url = URL.createObjectURL(pdfFile);
+                    $('#pdf-viewer').attr('data', url); // Set PDF source
+                    $('#pdf-download-link').attr('href', url); // Set download link
+                },
+                error: function(error) {
+                    $('#pdf-result').text('Error: ' + error.responseJSON.error);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

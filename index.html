@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio and PDF Transcription</title>
@@ -11,6 +10,7 @@
         body, html {
             height: 100%;
             margin: 0;
+            font-family: Arial, sans-serif;
         }
         .container {
             max-height: 100%;
@@ -19,22 +19,31 @@
         #pdf-viewer, #pdf-result {
             height: 300px; /* You can adjust this */
         }
-        #audio-result {
-            text-align: justify; /* Align text to both left and right margins */
-            line-height: 1.5; /* Control the space between lines */
+        #record-button.recording {
+            background-color: green;
+            color: white;
         }
-    </style>
+        #audio-player {
+            width: 40%;
+            margin: 0px auto;
+            display: block;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+</style>
 </head>
 <body>
     <div class="container">
         <h1 class="text-center mt-4">Transcribe Audio</h1>
-        <div class="form-group">
-            <input type="file" id="audio-file" accept="audio/*" class="form-control">
-        </div>
-        <button onclick="transcribeAudio()" class="btn btn-primary mb-4">Transcribe</button>
+        <button id="record-button" class="btn btn-primary mb-4">Start Recording</button>
         <audio id="audio-player" controls></audio>
-        <p id="audio-result" style="white-space: pre-line;"></p>
-
+        <p id="transcription" style="white-space: pre-line;"></p>
         <h1 class="text-center mt-4">Translate PDF</h1>
         <div class="form-group">
             <input type="file" id="pdf-file" accept="application/pdf" class="form-control">
@@ -55,11 +64,38 @@
     </div>
 
     <script>
-        function transcribeAudio() {
-            var audioFile = $('#audio-file')[0].files[0];
-            var formData = new FormData();
-            formData.append('audio', audioFile);
 
+        document.getElementById('record-button').addEventListener('click', function() {
+            var button = this;
+
+            if (button.textContent === 'Start Recording') {
+                button.textContent = 'Stop Recording';
+                button.classList.add('recording'); // Add the recording class to change the color to green
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        var mediaRecorder = new MediaRecorder(stream);
+                        mediaRecorder.ondataavailable = function(event) {
+                            if (event.data.size > 0) {
+                                sendAudioToServer(event.data);
+                            }
+                        };
+                        mediaRecorder.start();
+                        button.addEventListener('click', function stopRecording() {
+                            mediaRecorder.stop();
+                            stream.getTracks().forEach(track => track.stop());
+                            button.removeEventListener('click', stopRecording);
+                            button.textContent = 'Start Recording';
+                            button.classList.remove('recording'); // Remove the recording class to revert the color
+                        }, { once: true });
+                    });
+            }
+        });
+
+
+        function sendAudioToServer(audioData) {
+            var formData = new FormData();
+            var blob = new Blob([audioData], { 'type': 'audio/wav' }); // Change type if necessary
+            formData.append('audio', blob, 'audio.wav');
             $.ajax({
                 url: '/transcribe',
                 type: 'POST',
@@ -67,12 +103,11 @@
                 processData: false,
                 contentType: false,
                 success: function(result) {
-                    $('#audio-result').text(result.transcription || "No transcription available.");
-                    var url = URL.createObjectURL(audioFile);
-                    $('#audio-player').attr('src', url); // Set audio source
+                    $('#transcription').text(result.transcription);
+                    $('#audio-player').attr('src', result.audio_url); // Add the audio player
                 },
                 error: function(error) {
-                    $('#audio-result').text('Error: ' + error.responseJSON.error);
+                    $('#transcription').text('Error: ' + error.responseJSON.error);
                 }
             });
         }
@@ -81,7 +116,6 @@
             var pdfFile = $('#pdf-file')[0].files[0];
             var formData = new FormData();
             formData.append('file', pdfFile);
-
             $.ajax({
                 url: '/pdf_to_text',
                 type: 'POST',
@@ -90,12 +124,12 @@
                 contentType: false,
                 success: function(text) {
                     var textWithSpaces = text.replace(/ {2,}/g, function(match) {
-                        return match; // Return the exact match of multiple spaces
+                        return match;
                     });
                     $('#pdf-result').text(textWithSpaces);
                     var url = URL.createObjectURL(pdfFile);
-                    $('#pdf-viewer').attr('data', url); // Set PDF source
-                    $('#pdf-download-link').attr('href', url); // Set download link
+                    $('#pdf-viewer').attr('data', url);
+                    $('#pdf-download-link').attr('href', url);
                 },
                 error: function(error) {
                     $('#pdf-result').text('Error: ' + error.responseJSON.error);
